@@ -105,7 +105,7 @@ def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
         pdf.multi_cell(190, 4, clean_text, border='B')
         pdf.ln(1)
 
-    return pdf.output(dest='S').encode('latin-1')
+    return pdf.output()
 
 # --- FUNGSI LOAD DATA & TRAIN MODEL ---
 def load_and_train():
