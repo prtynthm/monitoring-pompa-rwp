@@ -49,12 +49,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNGSI GENERATE PDF (VERSI PERBAIKAN: OPTIMALISASI 1 HALAMAN) ---
+# --- FUNGSI GENERATE PDF (VERSI FINAL: 1 HALAMAN & FIX ERROR) ---
 def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
-    pdf = FPDF()
+    # Inisialisasi PDF (A4 Portrait)
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=10)
     pdf.add_page()
     
-    # Header - Ukuran font dan margin diperkecil
+    # Header - Ukuran font dirampingkan
     pdf.set_font("Arial", 'B', 14)
     pdf.set_text_color(0, 51, 102)
     pdf.cell(190, 8, "LAPORAN DIAGNOSA PREVENTIF RAW WATER PUMP", ln=True, align='C')
@@ -62,7 +64,7 @@ def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
     pdf.cell(190, 5, "Sistem Analisis Support Vector Machine (SVM)", ln=True, align='C')
     pdf.ln(4)
 
-    # Ringkasan Status - Layout dibuat lebih ringkas
+    # Ringkasan Status
     pdf.set_fill_color(240, 240, 240)
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(190, 8, f" STATUS: {status}", ln=True, border=1, fill=True)
@@ -72,7 +74,7 @@ def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
     pdf.cell(64, 7, f"Keyakinan: {prob:.1f}%", border=1, ln=True, align='C')
     pdf.ln(4)
 
-    # Tabel Log Data (24 Jam) - Font diperkecil & baris dirapatkan agar muat 1 lembar
+    # Tabel Log Data (24 Jam) - Baris dirapatkan (height=4.2) agar muat 1 halaman
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(190, 6, "Log Data Operasional 24 Jam", ln=True)
     pdf.set_font("Arial", 'B', 8)
@@ -86,12 +88,12 @@ def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", '', 8)
     for index, row in input_df.iterrows():
-        pdf.cell(30, 4.5, str(row['Jam']), border=1, align='C')
-        pdf.cell(80, 4.5, str(row['Suhu (°C)']), border=1, align='C')
-        pdf.cell(80, 4.5, str(row['Press (kg/cm²)']), border=1, align='C')
+        pdf.cell(30, 4.2, str(row['Jam']), border=1, align='C')
+        pdf.cell(80, 4.2, str(row['Suhu (°C)']), border=1, align='C')
+        pdf.cell(80, 4.2, str(row['Press (kg/cm²)']), border=1, align='C')
         pdf.ln()
 
-    # Rekomendasi Tindakan - Menggunakan ruang yang tersisa di bawah tabel
+    # Rekomendasi Tindakan - Memanfaatkan sisa ruang di bawah tabel
     pdf.ln(4)
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(190, 6, "Rekomendasi Tindakan Preventif", ln=True)
@@ -99,12 +101,18 @@ def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
     for rec in rekomendasi_list:
         pdf.set_font("Arial", 'B', 8)
         pdf.set_fill_color(235, 235, 235)
-        pdf.cell(190, 5, f" Parameter: {rec['Parameter']} ({rec['Kondisi']})", ln=True, border='T', fill=True)
+        # Menghapus karakter non-latin untuk keamanan encoding
+        param_clean = rec['Parameter'].replace('°', ' ')
+        kondisi_clean = rec['Kondisi'].replace('°', ' ')
+        
+        pdf.cell(190, 5, f" Parameter: {param_clean} ({kondisi_clean})", ln=True, border='T', fill=True)
         pdf.set_font("Arial", '', 8)
-        clean_text = rec['Rekomendasi Tindakan'].replace('<br>', '\n')
-        pdf.multi_cell(190, 4, clean_text, border='B')
+        
+        text_clean = rec['Rekomendasi Tindakan'].replace('<br>', '\n').replace('°', ' ')
+        pdf.multi_cell(190, 4, text_clean, border='B')
         pdf.ln(1)
 
+    # Output dikembalikan sebagai bytes untuk st.download_button
     return pdf.output()
 
 # --- FUNGSI LOAD DATA & TRAIN MODEL ---
@@ -264,29 +272,32 @@ else:
             else:
                 if avg_suhu >= 60:
                     rekomendasi.append({
-                        "Parameter": "Suhu (Tinggi)", "Kondisi": f"{avg_suhu:.2f}°C",
+                        "Parameter": "Suhu (Tinggi)", "Kondisi": f"{avg_suhu:.2f} C",
                         "Rekomendasi Tindakan": "1. Lakukan pelumasan bearing motor (greasing) & periksa kipas pendingin motor.<br>2. Periksa apakah pipa flushing atau jalur pendingin tersumbat.<br>3. Periksa suara elektromotor dan pompa."
                     })
                 if avg_press < 0.6:
                     rekomendasi.append({
-                        "Parameter": "Tekanan (Rendah)", "Kondisi": f"{avg_press:.2f} kg/cm²",
+                        "Parameter": "Tekanan (Rendah)", "Kondisi": f"{avg_press:.2f} kg/cm2",
                         "Rekomendasi Tindakan": "1. Periksa strainer suction dari sumbatan sampah & cek kebocoran pada seal pipa.<br>2. Periksa kebocoran udara pada sambungan pipa.<br>3. Periksa celah (clearance) wear ring."
                     })
                 if avg_press > 1.5:
                     rekomendasi.append({
-                        "Parameter": "Tekanan (Tinggi)", "Kondisi": f"{avg_press:.2f} kg/cm²",
+                        "Parameter": "Tekanan (Tinggi)", "Kondisi": f"{avg_press:.2f} kg/cm2",
                         "Rekomendasi Tindakan": "1. Periksa gate valve discharge dari hambatan aliran.<br>2. Periksa beban arus (ampere) motor terhadap tekanan balik.<br>3. Periksa kondisi seal/gland packing."
                     })
 
-            # Tombol Download PDF
-            pdf_data = create_pdf(edited_df, avg_suhu, avg_press, final_status, final_prob, rekomendasi)
-            st.write("")
-            st.download_button(
-                label="📥 Unduh Laporan PDF",
-                data=pdf_data,
-                file_name=f"Laporan_RWP_{final_status}.pdf",
-                mime="application/pdf",
-            )
+            # Eksekusi PDF
+            try:
+                pdf_bytes = create_pdf(edited_df, avg_suhu, avg_press, final_status, final_prob, rekomendasi)
+                st.write("")
+                st.download_button(
+                    label="📥 Unduh Laporan PDF",
+                    data=pdf_bytes,
+                    file_name=f"Laporan_RWP_{final_status}.pdf",
+                    mime="application/pdf",
+                )
+            except Exception as e:
+                st.error(f"Gagal membuat PDF: {e}")
 
             # Visualisasi
             st.write("")
@@ -302,8 +313,8 @@ else:
             sns.scatterplot(data=df_hist, x=c_suhu, y=c_press, hue=c_label, palette={0: 'green', 1: 'red'}, alpha=0.4, ax=ax)
             ax.scatter(avg_suhu, avg_press, color='blue', s=300, marker='*', edgecolor='black', label='Kondisi Saat Ini', zorder=5)
             ax.set_title("Peta Klasifikasi SVM (RBF Kernel)", fontsize=14, fontweight='bold')
-            ax.set_xlabel("Suhu (°C)")
-            ax.set_ylabel("Tekanan (kg/cm²)")
+            ax.set_xlabel("Suhu (C)")
+            ax.set_ylabel("Tekanan (kg/cm2)")
             ax.legend(loc='upper right')
             st.pyplot(fig)
             
