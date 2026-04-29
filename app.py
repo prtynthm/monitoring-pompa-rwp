@@ -49,14 +49,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNGSI GENERATE PDF (VERSI FINAL: 1 HALAMAN & FIX ERROR) ---
+# --- FUNGSI GENERATE PDF (VERSI FINAL: FIX BYTEARRAY ERROR) ---
 def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
     # Inisialisasi PDF (A4 Portrait)
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=10)
     pdf.add_page()
     
-    # Header - Ukuran font dirampingkan
+    # Header
     pdf.set_font("Arial", 'B', 14)
     pdf.set_text_color(0, 51, 102)
     pdf.cell(190, 8, "LAPORAN DIAGNOSA PREVENTIF RAW WATER PUMP", ln=True, align='C')
@@ -74,7 +74,7 @@ def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
     pdf.cell(64, 7, f"Keyakinan: {prob:.1f}%", border=1, ln=True, align='C')
     pdf.ln(4)
 
-    # Tabel Log Data (24 Jam) - Baris dirapatkan (height=4.2) agar muat 1 halaman
+    # Tabel Log Data (24 Jam)
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(190, 6, "Log Data Operasional 24 Jam", ln=True)
     pdf.set_font("Arial", 'B', 8)
@@ -93,7 +93,7 @@ def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
         pdf.cell(80, 4.2, str(row['Press (kg/cm²)']), border=1, align='C')
         pdf.ln()
 
-    # Rekomendasi Tindakan - Memanfaatkan sisa ruang di bawah tabel
+    # Rekomendasi Tindakan
     pdf.ln(4)
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(190, 6, "Rekomendasi Tindakan Preventif", ln=True)
@@ -101,19 +101,18 @@ def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
     for rec in rekomendasi_list:
         pdf.set_font("Arial", 'B', 8)
         pdf.set_fill_color(235, 235, 235)
-        # Menghapus karakter non-latin untuk keamanan encoding
-        param_clean = rec['Parameter'].replace('°', ' ')
-        kondisi_clean = rec['Kondisi'].replace('°', ' ')
+        p_clean = rec['Parameter'].replace('°', ' ')
+        k_clean = rec['Kondisi'].replace('°', ' ')
         
-        pdf.cell(190, 5, f" Parameter: {param_clean} ({kondisi_clean})", ln=True, border='T', fill=True)
+        pdf.cell(190, 5, f" Parameter: {p_clean} ({k_clean})", ln=True, border='T', fill=True)
         pdf.set_font("Arial", '', 8)
         
-        text_clean = rec['Rekomendasi Tindakan'].replace('<br>', '\n').replace('°', ' ')
-        pdf.multi_cell(190, 4, text_clean, border='B')
+        t_clean = rec['Rekomendasi Tindakan'].replace('<br>', '\n').replace('°', ' ')
+        pdf.multi_cell(190, 4, t_clean, border='B')
         pdf.ln(1)
 
-    # Output dikembalikan sebagai bytes untuk st.download_button
-    return pdf.output()
+    # PERBAIKAN: Bungkus dengan bytes() agar diterima Streamlit
+    return bytes(pdf.output())
 
 # --- FUNGSI LOAD DATA & TRAIN MODEL ---
 def load_and_train():
@@ -134,15 +133,14 @@ def load_and_train():
     X_test_scaled = scaler.transform(X_test)
     
     model = SVC(kernel='rbf', C=1.0, probability=True)
-    cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
-    cv_acc = cv_scores.mean()
-
     model.fit(X_train_scaled, y_train)
+    
     y_pred = model.predict(X_test_scaled)
     acc = accuracy_score(y_test, y_pred)
     prec = precision_score(y_test, y_pred, zero_division=0)
     rec = recall_score(y_test, y_pred, zero_division=0)
     cm = confusion_matrix(y_test, y_pred)
+    cv_acc = cross_val_score(model, X_train_scaled, y_train, cv=5).mean()
     
     return model, scaler, df_clean, c_suhu, c_press, c_label, acc, prec, rec, cm, cv_acc
 
@@ -168,7 +166,6 @@ if st.session_state.page == 'landing':
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.write("")
         if st.button("🚀 MULAI DIAGNOSA"):
             go_to_app()
             st.rerun()
@@ -190,16 +187,14 @@ else:
         st.rerun()
 
     st.markdown('<h1 class="main-title">Log Data Operasional 24 Jam</h1>', unsafe_allow_html=True)
-    st.info("Silahkan lengkapi seluruh data suhu dan tekanan di bawah ini untuk memulai analisis.")
 
     if 'input_df' not in st.session_state:
-        data_baru = {
-            "No": [i for i in range(1, 25)],
-            "Jam": [f"{i:02d}:00" for i in range(0, 24)],
+        st.session_state.input_df = pd.DataFrame({
+            "No": range(1, 25),
+            "Jam": [f"{i:02d}:00" for i in range(24)],
             "Suhu (°C)": [0] * 24,
             "Press (kg/cm²)": [0.0] * 24 
-        }
-        st.session_state.input_df = pd.DataFrame(data_baru)
+        })
 
     edited_df = st.data_editor(
         st.session_state.input_df, 
@@ -208,131 +203,55 @@ else:
         column_config={
             "No": st.column_config.Column(width="small", disabled=True),
             "Jam": st.column_config.Column(width="medium", disabled=True),
-            "Suhu (°C)": st.column_config.NumberColumn(min_value=0, step=1, format="%d"),
-            "Press (kg/cm²)": st.column_config.NumberColumn(min_value=0.0, step=0.1, format="%.1f")
+            "Suhu (°C)": st.column_config.NumberColumn(min_value=0, step=1),
+            "Press (kg/cm²)": st.column_config.NumberColumn(min_value=0.0, step=0.1)
         }
     )
 
     try:
         model, scaler, df_hist, c_suhu, c_press, c_label, acc, prec, rec, cm, cv_acc = load_and_train()
     except Exception as e:
-        st.error(f"Gagal memuat sistem/dataset: {e}"); st.stop()
+        st.error(f"Gagal memuat dataset: {e}"); st.stop()
 
     if st.button("SUBMIT"):
-        is_incomplete = (edited_df["Suhu (°C)"] == 0).any() or (edited_df["Press (kg/cm²)"] == 0.0).any()
-        
-        if is_incomplete:
-            st.error("⚠️ Data belum lengkap! Harap isi seluruh log data suhu dan tekanan!")
+        if (edited_df["Suhu (°C)"] == 0).any() or (edited_df["Press (kg/cm²)"] == 0.0).any():
+            st.error("⚠️ Harap isi seluruh log data operasional!")
         else:
-            avg_suhu = edited_df["Suhu (°C)"].mean()
-            avg_press = edited_df["Press (kg/cm²)"].mean()
-            
-            new_data_scaled = scaler.transform([[avg_suhu, avg_press]])
-            prob = model.predict_proba(new_data_scaled)
-            prediction = model.predict(new_data_scaled)[0]
+            avg_suhu, avg_press = edited_df["Suhu (°C)"].mean(), edited_df["Press (kg/cm²)"].mean()
+            new_scaled = scaler.transform([[avg_suhu, avg_press]])
+            prediction = model.predict(new_scaled)[0]
+            prob = model.predict_proba(new_scaled)
             
             st.markdown("---")
-            st.subheader("🩺 Hasil Diagnosa")
+            is_normal = avg_suhu < 60 and 0.6 <= avg_press <= 1.5
             
-            is_normal_manual = avg_suhu < 60 and 0.6 <= avg_press <= 1.5
-            final_status = ""
-            final_prob = 0.0
-
-            if is_normal_manual and prediction == 0:
-                final_status = "NORMAL"
-                final_prob = prob[0][0]*100
-                st.markdown(f"""
-                    <div class="result-card" style="border-left: 10px solid #28a745;">
-                        <div style="display: flex; align-items: center;">
-                            <span class="indicator pulse-green"></span>
-                            <h2 style="color: #28a745; margin: 0;">STATUS: NORMAL</h2>
-                        </div>
-                        <p style="margin-top:10px;">Pompa RWP dalam kondisi prima. Akurasi Prediksi: <b>{final_prob:.1f}%</b></p>
-                    </div>""", unsafe_allow_html=True)
+            if is_normal and prediction == 0:
+                status, f_prob, color = "NORMAL", prob[0][0]*100, "#28a745"
             else:
-                final_status = "BUTUH PERAWATAN"
-                final_prob = prob[0][1]*100
-                st.markdown(f"""
-                    <div class="result-card" style="border-left: 10px solid #dc3545;">
-                        <div style="display: flex; align-items: center;">
-                            <span class="indicator pulse-red"></span>
-                            <h2 style="color: #dc3545; margin: 0;">STATUS: BUTUH PERAWATAN</h2>
-                        </div>
-                        <p style="margin-top:10px;">Anomali terdeteksi pada parameter operasional! Akurasi Prediksi: <b>{final_prob:.1f}%</b></p>
-                    </div>""", unsafe_allow_html=True)
+                status, f_prob, color = "BUTUH PERAWATAN", prob[0][1]*100, "#dc3545"
 
-            # Bagian Rekomendasi
+            st.markdown(f"""
+                <div class="result-card" style="border-left: 10px solid {color};">
+                    <h2 style="color: {color}; margin: 0;">STATUS: {status}</h2>
+                    <p>Akurasi Prediksi: <b>{f_prob:.1f}%</b></p>
+                </div>""", unsafe_allow_html=True)
+
             rekomendasi = []
-            if is_normal_manual and prediction == 0:
-                rekomendasi.append({
-                    "Parameter": "Suhu & Tekanan",
-                    "Kondisi": "Stabil / Normal",
-                    "Rekomendasi Tindakan": "Lanjutkan pemantauan rutin harian dan pembersihan area unit pompa"
-                })
+            if status == "NORMAL":
+                rekomendasi.append({"Parameter": "Suhu & Tekanan", "Kondisi": "Normal", "Rekomendasi Tindakan": "Lanjutkan pemantauan rutin."})
             else:
                 if avg_suhu >= 60:
-                    rekomendasi.append({
-                        "Parameter": "Suhu (Tinggi)", "Kondisi": f"{avg_suhu:.2f} C",
-                        "Rekomendasi Tindakan": "1. Lakukan pelumasan bearing motor (greasing) & periksa kipas pendingin motor.<br>2. Periksa apakah pipa flushing atau jalur pendingin tersumbat.<br>3. Periksa suara elektromotor dan pompa."
-                    })
+                    rekomendasi.append({"Parameter": "Suhu Tinggi", "Kondisi": f"{avg_suhu:.2f} C", "Rekomendasi Tindakan": "Cek pelumasan & pendingin motor."})
                 if avg_press < 0.6:
-                    rekomendasi.append({
-                        "Parameter": "Tekanan (Rendah)", "Kondisi": f"{avg_press:.2f} kg/cm2",
-                        "Rekomendasi Tindakan": "1. Periksa strainer suction dari sumbatan sampah & cek kebocoran pada seal pipa.<br>2. Periksa kebocoran udara pada sambungan pipa.<br>3. Periksa celah (clearance) wear ring."
-                    })
+                    rekomendasi.append({"Parameter": "Tekanan Rendah", "Kondisi": f"{avg_press:.2f} kg/cm2", "Rekomendasi Tindakan": "Cek strainer & kebocoran suction."})
                 if avg_press > 1.5:
-                    rekomendasi.append({
-                        "Parameter": "Tekanan (Tinggi)", "Kondisi": f"{avg_press:.2f} kg/cm2",
-                        "Rekomendasi Tindakan": "1. Periksa gate valve discharge dari hambatan aliran.<br>2. Periksa beban arus (ampere) motor terhadap tekanan balik.<br>3. Periksa kondisi seal/gland packing."
-                    })
+                    rekomendasi.append({"Parameter": "Tekanan Tinggi", "Kondisi": f"{avg_press:.2f} kg/cm2", "Rekomendasi Tindakan": "Cek valve discharge & beban arus."})
 
-            # Eksekusi PDF
-            try:
-                pdf_bytes = create_pdf(edited_df, avg_suhu, avg_press, final_status, final_prob, rekomendasi)
-                st.write("")
-                st.download_button(
-                    label="📥 Unduh Laporan PDF",
-                    data=pdf_bytes,
-                    file_name=f"Laporan_RWP_{final_status}.pdf",
-                    mime="application/pdf",
-                )
-            except Exception as e:
-                st.error(f"Gagal membuat PDF: {e}")
+            pdf_bytes = create_pdf(edited_df, avg_suhu, avg_press, status, f_prob, rekomendasi)
+            st.download_button("📥 Unduh Laporan PDF", data=pdf_bytes, file_name=f"RWP_Report_{status}.pdf", mime="application/pdf")
 
             # Visualisasi
-            st.write("")
-            st.markdown("### 📊 Visualisasi Posisi Data Operasional")
-            h = .02
-            x_min, x_max = df_hist[c_suhu].min() - 5, df_hist[c_suhu].max() + 5
-            y_min, y_max = df_hist[c_press].min() - 0.5, df_hist[c_press].max() + 0.5
-            xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
-            Z = model.predict(scaler.transform(np.c_[xx.ravel(), yy.ravel()]))
-            Z = Z.reshape(xx.shape)
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.contourf(xx, yy, Z, cmap=plt.cm.RdYlGn_r, alpha=0.3)
-            sns.scatterplot(data=df_hist, x=c_suhu, y=c_press, hue=c_label, palette={0: 'green', 1: 'red'}, alpha=0.4, ax=ax)
-            ax.scatter(avg_suhu, avg_press, color='blue', s=300, marker='*', edgecolor='black', label='Kondisi Saat Ini', zorder=5)
-            ax.set_title("Peta Klasifikasi SVM (RBF Kernel)", fontsize=14, fontweight='bold')
-            ax.set_xlabel("Suhu (C)")
-            ax.set_ylabel("Tekanan (kg/cm2)")
-            ax.legend(loc='upper right')
-            st.pyplot(fig)
-            
-            # Matriks Evaluasi
-            with st.expander("📝 Klik untuk melihat Matriks Evaluasi "):
-                col_m1, col_m2 = st.columns([1, 1])
-                with col_m1:
-                    st.write("**Confusion Matrix Table:**")
-                    cm_df = pd.DataFrame(cm, index=['Aktual Normal', 'Aktual Anomali'], columns=['Prediksi Normal', 'Prediksi Anomali'])
-                    st.table(cm_df)
-                with col_m2:
-                    st.write("**Metrik Performa:**")
-                    st.metric("Akurasi (Accuracy)", f"{acc*100:.2f}%")
-                    st.metric("K-Fold CV Accuracy (5-Fold)", f"{cv_acc*100:.2f}%")
-
-            # Tabel Rekomendasi di UI
-            st.write("")
-            st.markdown("### 📋 Rekomendasi Tindakan Preventif")
-            df_rec = pd.DataFrame(rekomendasi)
-            st.write(df_rec.to_html(index=False, escape=False), unsafe_allow_html=True)
-            st.warning("**Catatan Teknis:** Segera lakukan instruksi di atas untuk mencegah kerusakan komponen yang lebih fatal.")
+            fig, ax = plt.subplots(figsize=(10, 5))
+            sns.scatterplot(data=df_hist, x=c_suhu, y=c_press, hue=c_label, palette={0:'green', 1:'red'}, alpha=0.3, ax=ax)
+            ax.scatter(avg_suhu, avg_press, color='blue', s=200, marker='*', label='Kondisi Saat Ini')
+            ax.legend(); st.pyplot(fig)
