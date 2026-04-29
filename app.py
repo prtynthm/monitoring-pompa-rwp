@@ -7,7 +7,7 @@ from sklearn.svm import SVC
 from sklearn.preprocessing import MinMaxScaler 
 from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split, cross_val_score
-from fpdf import FPDF # type: ignore
+from fpdf import FPDF
 import base64
 
 # --- KONFIGURASI HALAMAN ---
@@ -49,62 +49,61 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNGSI GENERATE PDF ---
+# --- FUNGSI GENERATE PDF (VERSI PERBAIKAN: OPTIMALISASI 1 HALAMAN) ---
 def create_pdf(input_df, avg_suhu, avg_press, status, prob, rekomendasi_list):
     pdf = FPDF()
     pdf.add_page()
     
-    # Header
-    pdf.set_font("Arial", 'B', 16)
+    # Header - Ukuran font dan margin diperkecil
+    pdf.set_font("Arial", 'B', 14)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(190, 10, "LAPORAN DIAGNOSA PREVENTIF RAW WATER PUMP", ln=True, align='C')
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(190, 7, "Sistem Analisis Support Vector Machine (SVM)", ln=True, align='C')
-    pdf.ln(10)
+    pdf.cell(190, 8, "LAPORAN DIAGNOSA PREVENTIF RAW WATER PUMP", ln=True, align='C')
+    pdf.set_font("Arial", '', 9)
+    pdf.cell(190, 5, "Sistem Analisis Support Vector Machine (SVM)", ln=True, align='C')
+    pdf.ln(4)
 
-    # Ringkasan Status
+    # Ringkasan Status - Layout dibuat lebih ringkas
     pdf.set_fill_color(240, 240, 240)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(190, 10, f" STATUS: {status}", ln=True, border=1, fill=True)
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(95, 8, f"Rata-rata Suhu: {avg_suhu:.2f} C", border=1)
-    pdf.cell(95, 8, f"Rata-rata Tekanan: {avg_press:.2f} kg/cm2", border=1, ln=True)
-    pdf.cell(190, 8, f"Tingkat Keyakinan Prediksi: {prob:.1f}%", border=1, ln=True)
-    pdf.ln(10)
-
-    # Tabel Log Data (24 Jam)
     pdf.set_font("Arial", 'B', 11)
-    pdf.cell(190, 8, "Log Data Operasional 24 Jam", ln=True)
+    pdf.cell(190, 8, f" STATUS: {status}", ln=True, border=1, fill=True)
+    pdf.set_font("Arial", '', 9)
+    pdf.cell(63, 7, f"Rerata Suhu: {avg_suhu:.2f} C", border=1, align='C')
+    pdf.cell(63, 7, f"Rerata Tekanan: {avg_press:.2f} kg/cm2", border=1, align='C')
+    pdf.cell(64, 7, f"Keyakinan: {prob:.1f}%", border=1, ln=True, align='C')
+    pdf.ln(4)
+
+    # Tabel Log Data (24 Jam) - Font diperkecil & baris dirapatkan agar muat 1 lembar
     pdf.set_font("Arial", 'B', 10)
+    pdf.cell(190, 6, "Log Data Operasional 24 Jam", ln=True)
+    pdf.set_font("Arial", 'B', 8)
     pdf.set_fill_color(0, 51, 102)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(30, 8, "Jam", border=1, align='C', fill=True)
-    pdf.cell(80, 8, "Suhu (C)", border=1, align='C', fill=True)
-    pdf.cell(80, 8, "Tekanan (kg/cm2)", border=1, align='C', fill=True)
+    pdf.cell(30, 5, "Jam", border=1, align='C', fill=True)
+    pdf.cell(80, 5, "Suhu (C)", border=1, align='C', fill=True)
+    pdf.cell(80, 5, "Tekanan (kg/cm2)", border=1, align='C', fill=True)
     pdf.ln()
 
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", '', 9)
+    pdf.set_font("Arial", '', 8)
     for index, row in input_df.iterrows():
-        pdf.cell(30, 7, str(row['Jam']), border=1, align='C')
-        pdf.cell(80, 7, str(row['Suhu (°C)']), border=1, align='C')
-        pdf.cell(80, 7, str(row['Press (kg/cm²)']), border=1, align='C')
+        pdf.cell(30, 4.5, str(row['Jam']), border=1, align='C')
+        pdf.cell(80, 4.5, str(row['Suhu (°C)']), border=1, align='C')
+        pdf.cell(80, 4.5, str(row['Press (kg/cm²)']), border=1, align='C')
         pdf.ln()
 
-    # Rekomendasi Tindakan
-    pdf.ln(10)
-    pdf.set_font("Arial", 'B', 11)
-    pdf.cell(190, 8, "Rekomendasi Tindakan Preventif", ln=True)
+    # Rekomendasi Tindakan - Menggunakan ruang yang tersisa di bawah tabel
+    pdf.ln(4)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(190, 6, "Rekomendasi Tindakan Preventif", ln=True)
     
     for rec in rekomendasi_list:
-        pdf.set_font("Arial", 'B', 10)
-        pdf.set_fill_color(230, 230, 230)
-        pdf.cell(190, 7, f"Parameter: {rec['Parameter']} ({rec['Kondisi']})", ln=True, border='T', fill=True)
-        pdf.set_font("Arial", '', 9)
-        # Menghilangkan tag <br> untuk PDF
+        pdf.set_font("Arial", 'B', 8)
+        pdf.set_fill_color(235, 235, 235)
+        pdf.cell(190, 5, f" Parameter: {rec['Parameter']} ({rec['Kondisi']})", ln=True, border='T', fill=True)
+        pdf.set_font("Arial", '', 8)
         clean_text = rec['Rekomendasi Tindakan'].replace('<br>', '\n')
-        pdf.multi_cell(190, 6, clean_text, border='B')
-        pdf.ln(2)
+        pdf.multi_cell(190, 4, clean_text, border='B')
+        pdf.ln(1)
 
     return pdf.output(dest='S').encode('latin-1')
 
